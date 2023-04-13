@@ -1,0 +1,35 @@
+queries:
+  - query: |
+      SELECT 1 FROM call_traces ct \
+        WHERE ct.transaction_module = "0x190d44266241744264b964a37b8f09863167a12d3e70cda39376cfb4e3561e12::router_v2" \
+        AND ct.function = "register_pool"
+    incidentMessage: "New pool created"
+    severity: INFO
+
+  - query: |
+      SELECT 1 FROM call_traces ct \
+      WHERE ct.transaction_module = "0x190d44266241744264b964a37b8f09863167a12d3e70cda39376cfb4e3561e12::global_config" \
+      AND starts_with(ct.function, "set_")
+    incidentMessage: "Global config has been changed"
+    severity: ALERT
+
+  - query: |
+      SELECT 1 FROM call_traces ct \
+      WHERE ct.transaction_module = "0x190d44266241744264b964a37b8f09863167a12d3e70cda39376cfb4e3561e12::emergency" \
+      AND ct.function = "pause"
+    incidentMessage: "Emergency Pause"
+    severity: ALERT
+
+  - query: |
+      SELECT 1 FROM call_traces ct \
+      WHERE ct.transaction_module = "0x190d44266241744264b964a37b8f09863167a12d3e70cda39376cfb4e3561e12::emergency" \
+      AND ct.function = "resume"
+    incidentMessage: "Emergency Resume"
+    severity: ALERT
+
+  - query: |
+      SELECT 1 FROM call_traces ct \
+      WHERE ct.transaction_module = "0x190d44266241744264b964a37b8f09863167a12d3e70cda39376cfb4e3561e12::emergency" \
+      AND ct.function = "disable_forever"
+    incidentMessage: "An account has been disabled forever"
+    severity: ALERT

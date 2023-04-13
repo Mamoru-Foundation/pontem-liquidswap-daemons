@@ -1,0 +1,8 @@
+version: 0.0.1
+name: mamoru-pontem-liquidswap-wasm
+type: wasm
+subscribable: false
+description: WASM Daemons for Pontem LiquidSwap
+logoUrl: https://assets.website-files.com/60536b901b879c2f395d75d0/6433c9aa562f382eaa1b83f8_Pontem_logo_sign.png
+chain: aptos
+tags: [mamoru,daemon]

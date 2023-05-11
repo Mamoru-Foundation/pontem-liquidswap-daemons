@@ -1,93 +1,85 @@
-import { report, IncidentSeverity, query } from '@mamoru-ai/mamoru-sdk-as/assembly';
-import { u128 } from "as-bignum/assembly";
+import { IncidentSeverity, report, u128 } from '@mamoru-ai/mamoru-sdk-as/assembly';
 import { findBurnValues, findMintLpCoinTotal, findMintProvidedLiq } from "./liquidity";
 import { findReserveSizes } from "./swap";
+import { AptosCtx } from "@mamoru-ai/mamoru-aptos-sdk-as/assembly"
 
 // Liquidswap package id in Aptos Mainnet
 const PACKAGE_ID: string = "0x190d44266241744264b964a37b8f09863167a12d3e70cda39376cfb4e3561e12";
 
-// Returns all call traces of a transaction
-// if `mint` or `burn` call is found in the transaction
-const QUERY: string = `
-    WITH liquidity_pool_call AS (
-        SELECT 
-            ct.function, ct.depth, ct.tx_seq FROM call_traces ct
-        WHERE
-            ct.transaction_module = "${PACKAGE_ID}::liquidity_pool" AND
-            ct.function = "mint" OR ct.function = "burn" OR ct.function = "swap"
-    )
-
-    SELECT 
-        ct.*,
-        liquidity_pool_call.function AS called_function,
-        liquidity_pool_call.depth AS called_function_depth
-    FROM 
-        call_traces ct
-    WHERE 
-        liquidity_pool_call IS NOT NULL AND ct.tx_seq = liquidity_pool_call.tx_seq
-`;
-
 export function main(): void {
-    let callTraces = query(QUERY);
+    const ctx = AptosCtx.load();
 
-    if (callTraces.length == 0) {
-        // No calls found, nothing to do
-        return;
-    }
+    for (let i = 0; i < ctx.txs.length; i++) {
+        const tx = ctx.txs[i];
 
-    let functionName = callTraces[0].getString("called_function")!.valueOf();
-    let baseDepth = callTraces[0].getInteger("called_function_depth")!.valueOf();
+        const entryFunctionTraces = tx.callTraces.filter((ct) => {
+            const isLiquidityPool = ct.transactionModule == `${PACKAGE_ID}::liquidity_pool`
+            const isRequiredFunction = ct.func == "mint" || ct.func == "burn" || ct.func == "swap"
 
-    if (functionName == "swap") {
-        const reserveSizes = findReserveSizes(callTraces, baseDepth);
+            return isLiquidityPool && isRequiredFunction
+        });
 
-        const xReserveOld = reserveSizes[0];
-        const yReserveOld = reserveSizes[1];
-        const xReserveNew = reserveSizes[2];
-        const yReserveNew = reserveSizes[3];
-
-        if (xReserveOld == u128.Zero || xReserveNew == u128.Zero || yReserveOld == u128.Zero || yReserveNew == u128.Zero) {
+        if (entryFunctionTraces.length == 0) {
+            // No calls found, nothing to do
             return;
         }
 
-        const oldPrice = xReserveOld / yReserveOld;
-        const newPrice = xReserveNew / yReserveNew;
+        // It is possible that we have a few calls in the same tx, so using a loop
+        for (let i = 0; i < entryFunctionTraces.length; i++) {
+            const entryTrace = entryFunctionTraces[i];
 
-        // assuming that price is x/y
-        if (tradePriceChangePercent(oldPrice, newPrice) > u128.from(10)) {
-            report(IncidentSeverity.Warning, "Trade that influence price to drop more than 10%");
-            return;
-        }
-    }
+            if (entryTrace.func == "swap") {
+                const reserveSizes = findReserveSizes(tx.callTraces, entryTrace);
 
-    if (functionName == "mint") {
-        let lpCoinTotal = findMintLpCoinTotal(callTraces, baseDepth)
-        let providedLiq = findMintProvidedLiq(callTraces, baseDepth);
+                const xReserveOld = reserveSizes[0];
+                const yReserveOld = reserveSizes[1];
+                const xReserveNew = reserveSizes[2];
+                const yReserveNew = reserveSizes[3];
 
-        if (lpCoinTotal == -1 || providedLiq == -1) {
-            return;
-        }
+                if (xReserveOld == u128.Zero || xReserveNew == u128.Zero || yReserveOld == u128.Zero || yReserveNew == u128.Zero) {
+                    return;
+                }
 
-        if (liquidityChangePercent(lpCoinTotal, providedLiq) > 10) {
-            report(IncidentSeverity.Info, "Big liquidity add to a pool (increase more than 10%)");
+                const oldPrice = xReserveOld / yReserveOld;
+                const newPrice = xReserveNew / yReserveNew;
 
-            return;
-        }
-    }
+                // assuming that price is x/y
+                if (tradePriceChangePercent(oldPrice, newPrice) > u128.from(10)) {
+                    report(IncidentSeverity.Warning, "Trade that influence price to drop more than 10%");
+                    return;
+                }
+            }
 
-    if (functionName == "burn") {
-        const burnValues = findBurnValues(callTraces, baseDepth);
-        const burnedLiq = burnValues[0];
-        const lpCoinsTotal = burnValues[1];
+            if (entryTrace.func == "mint") {
+                let lpCoinTotal = findMintLpCoinTotal(tx.callTraces, entryTrace);
+                let providedLiq = findMintProvidedLiq(tx.callTraces, entryTrace);
 
-        if (burnedLiq == -1 || lpCoinsTotal == -1) {
-            return;
-        }
+                if (lpCoinTotal == -1 || providedLiq == -1) {
+                    return;
+                }
 
-        if (liquidityChangePercent(lpCoinsTotal, -burnedLiq) < -10) {
-            report(IncidentSeverity.Warning, "Big liquidity removal from a pool (decrease more than 10%)");
+                if (liquidityChangePercent(lpCoinTotal, providedLiq) > 10) {
+                    report(IncidentSeverity.Info, "Big liquidity add to a pool (increase more than 10%)");
 
-            return;
+                    return;
+                }
+            }
+
+            if (entryTrace.func == "burn") {
+                const burnValues = findBurnValues(tx.callTraces, entryTrace);
+                const burnedLiq = burnValues[0];
+                const lpCoinsTotal = burnValues[1];
+
+                if (burnedLiq == -1 || lpCoinsTotal == -1) {
+                    return;
+                }
+
+                if (liquidityChangePercent(lpCoinsTotal, -burnedLiq) < -10) {
+                    report(IncidentSeverity.Warning, "Big liquidity removal from a pool (decrease more than 10%)");
+
+                    return;
+                }
+            }
         }
     }
 }

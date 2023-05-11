@@ -1,0 +1,24 @@
+{
+  "name": "mamoru-pontem-liquidswap-wasm",
+  "version": "0.0.1",
+  "license": "Apache-2.0",
+  "description": "Mamoru Daemon",
+  "tags": [
+    "mamoru",
+    "daemon"
+  ],
+  "type": "module",
+  "scripts": {
+    "test": "asp --verbose",
+    "build": "asc src/index.ts --exportRuntime --outFile build/index.wasm -b build/index.wat --sourceMap --optimize --exportRuntime --runtime stub --lib"
+  },
+  "dependencies": {
+    "@mamoru-ai/mamoru-sdk-as": "^0.2.1",
+    "as-bignum": "^0.2.30",
+    "assemblyscript-json": "^1.1.0"
+  },
+  "devDependencies": {
+    "@as-pect/cli": "^8.0.1",
+    "assemblyscript": "^0.27.1"
+  }
+}

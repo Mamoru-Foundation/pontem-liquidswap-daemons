@@ -1,14 +1,15 @@
-import { JSON } from "assemblyscript-json/assembly";
+import { CallTrace } from "@mamoru-ai/mamoru-aptos-sdk-as/assembly";
 
-export function findCallTraces(callTraces: JSON.Obj[], depth: i64, func: string): JSON.Obj[] {
-    let found = new Array<JSON.Obj>();
+export function findFollowingTraces(callTraces: CallTrace[], entryTrace: CallTrace, func: string): CallTrace[] {
+    let found = new Array<CallTrace>();
 
     for (let i = 0; i < callTraces.length; i++) {
         const trace = callTraces[i];
-        const traceDepth = trace.getInteger("depth")!.valueOf();
-        const traceFunc = trace.getString("function")!.valueOf();
 
-        if (traceDepth == depth && traceFunc == func) {
+        // Following traces are:
+        // - called after entry trace
+        // - are deeper in the call stack
+        if (trace.seq > entryTrace.seq && trace.depth == (entryTrace.depth + 1) && trace.func == func) {
             found.push(trace);
         }
     }
